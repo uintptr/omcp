@@ -1,3 +1,4 @@
+[![rust](https://github.com/uintptr/omcp/actions/workflows/rust.yml/badge.svg)](https://github.com/uintptr/omcp/actions/workflows/rust.yml)
 # omcp
 
 oxidized mcp
