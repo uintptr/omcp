@@ -23,6 +23,7 @@ pub enum Error {
     HttpFailure,
     ReadFailure,
     EndpointMissing,
+    Eof,
 
     //
     // 2nd party

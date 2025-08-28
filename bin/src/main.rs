@@ -112,7 +112,8 @@ impl DumpEventHandler {
             Some(2) => {
                 let msg_string = serde_json::to_string_pretty(msg)?;
                 println!("{msg_string}");
-                Ok(())
+                // we're done
+                Err(Error::Eof)
             }
             _ => {
                 dbg!(msg);
@@ -215,7 +216,12 @@ async fn main() -> Result<()> {
     client.connect().await?;
 
     if let Err(e) = handler.event_loop(&client).await {
-        error!("{e}");
+        if let Error::Eof = e {
+            // silenced since we intentionally broke
+            // out of the loop
+        } else {
+            error!("{e}");
+        }
     }
 
     client.disconnect().await

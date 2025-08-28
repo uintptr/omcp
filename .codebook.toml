@@ -1,0 +1,6 @@
+words = ["MCP", "rustc", "fixme", "todo", "omcpdump", "jrpc", "Sse"]
+flag_words = ["todo", "fixme"]
+ignore_paths = ["target/**/*", "**/*.json", ".git/**/*"]
+dictionaries = ["en_us", "en_gb"]
+min_word_length = 3
+use_global = true
