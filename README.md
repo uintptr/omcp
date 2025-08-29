@@ -1,4 +1,5 @@
 [![rust](https://github.com/uintptr/omcp/actions/workflows/rust.yml/badge.svg)](https://github.com/uintptr/omcp/actions/workflows/rust.yml)
+
 # omcp
 
 oxidized mcp
@@ -8,7 +9,7 @@ oxidized mcp
 List the tools from the MCP server
 
 ```
-cargo run -- --server http://localhost:8123/mcp_server/sse --bearer $TOKEN
+omcp dump-tools --server http://localhost:8123/mcp_server/sse --bearer $TOKEN
 ```
 
 ```json
