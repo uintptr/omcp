@@ -2,6 +2,10 @@
 name = "omcp"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Utility functions"
+repository = "https://github.com/uintptr/omcp"
+homepage = "https://github.com/uintptr/omcp"
 
 
 [dependencies]
@@ -20,3 +24,9 @@ tokio = { version = "1.47.1", features = [
     "test-util",
     "rt-multi-thread",
 ] }
+
+[dev-dependencies]
+clap = { version = "4.5.46", features = ["derive"] }
+
+[[example]]
+name = "omcpcli"
