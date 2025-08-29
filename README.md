@@ -9,7 +9,7 @@ oxidized mcp
 List the tools from the MCP server
 
 ```
-omcp dump-tools --server http://localhost:8123/mcp_server/sse --bearer $TOKEN
+cargo run --example omcpcli dump-tools --server http://localhost:8123/mcp_server/sse --bearer $TOKEN
 ```
 
 ```json
