@@ -4,6 +4,55 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const JSON_RPC_VERSION: &str = "2.0";
+pub const JSON_RPC_PROTOCOL_VERSION: &str = "2025-03-26";
+pub const CLIENT_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/*
+let params_json = r#"{
+"protocolVersion": "2025-03-26",
+"capabilities": {
+  "roots": {
+    "listChanged": true
+  },
+  "sampling": {}
+},
+"clientInfo": {
+  "name": "omcp",
+  "version": "1.0.0"
+}}
+"#;
+*/
+
+#[derive(Serialize)]
+pub struct JsonRPCRoots {
+    #[serde(rename = "listChanged")]
+    list_changed: bool,
+}
+
+#[derive(Serialize)]
+pub struct JsonRPCSampling {}
+
+#[derive(Serialize)]
+pub struct JsonRPCCapabilities {
+    roots: JsonRPCRoots,
+    sampling: JsonRPCSampling,
+}
+
+#[derive(Serialize)]
+pub struct JsonRPCClientInfo {
+    name: String,
+    version: String,
+}
+
+#[derive(Serialize)]
+pub struct JsonRPCInitParams {
+    #[serde(rename = "protocolVersion")]
+    protocol_version: String,
+    capabilities: JsonRPCCapabilities,
+    #[serde(rename = "clientInfo")]
+    client_info: JsonRPCClientInfo,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRPCTool {
@@ -32,6 +81,31 @@ pub struct JsonRPCMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "params")]
     pub parameters: Option<HashMap<String, Value>>,
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// IMPL
+///////////////////////////////////////////////////////////////////////////////
+
+impl JsonRPCInitParams {
+    pub fn new() -> Self {
+        let roots = JsonRPCRoots { list_changed: true };
+
+        let sampling = JsonRPCSampling {};
+
+        let capabilities = JsonRPCCapabilities { roots, sampling };
+
+        let client_info = JsonRPCClientInfo {
+            name: CLIENT_NAME.to_string(),
+            version: CLIENT_VERSION.to_string(),
+        };
+
+        Self {
+            protocol_version: JSON_RPC_PROTOCOL_VERSION.to_string(),
+            capabilities,
+            client_info,
+        }
+    }
 }
 
 impl JsonRPCMessage {}

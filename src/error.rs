@@ -7,6 +7,7 @@ pub enum Error {
     //
     // 1st party
     //
+    NotImplemented,
     QuitSignalFailure,
     ConnectionFailure,
     Empty,
@@ -24,6 +25,7 @@ pub enum Error {
     ReadFailure,
     EndpointMissing,
     Eof,
+    ConnectionStateFailure,
 
     //
     // 2nd party

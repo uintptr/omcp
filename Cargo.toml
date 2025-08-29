@@ -3,15 +3,9 @@ name = "omcp"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-name = "omcp"
-path = "lib/src/lib.rs"
-
-[[bin]]
-name = "omcpdump"
-path = "bin/src/main.rs"
 
 [dependencies]
+async-trait = "0.1.89"
 clap = { version = "4.5.46", features = ["derive"] }
 derive_more = { version = "2.0.1", features = ["from"] }
 futures-util = "0.3.31"

@@ -22,11 +22,7 @@ impl SseEventEndpoint {
         S: AsRef<str>,
         E: AsRef<str>,
     {
-        let root = endpoint
-            .as_ref()
-            .split("/")
-            .nth(1)
-            .ok_or(Error::InvalidEndpoint)?;
+        let root = endpoint.as_ref().split("/").nth(1).ok_or(Error::InvalidEndpoint)?;
 
         let root = format!("/{root}");
 

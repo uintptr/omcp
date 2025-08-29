@@ -1,14 +1,9 @@
 use std::str::FromStr;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use tokio::sync::mpsc::Sender;
 
 use crate::{
-    client::{
-        io::OMcpClient,
-        sse::SseClient,
-        types::{OMcpServerType, SseEvent},
-    },
+    client::{io::OMcpClient, sse::SseClient, types::OMcpServerType},
     error::Result,
 };
 
@@ -16,7 +11,6 @@ pub struct OMcpClientBuilder {
     pub url: String,
     pub server_type: OMcpServerType,
     pub headers: HeaderMap,
-    pub sender: Option<Sender<SseEvent>>,
 }
 
 impl OMcpClientBuilder {
@@ -28,7 +22,6 @@ impl OMcpClientBuilder {
             url: url.as_ref().into(),
             server_type,
             headers: HeaderMap::new(),
-            sender: None,
         }
     }
 
@@ -49,11 +42,6 @@ impl OMcpClientBuilder {
         let value = HeaderValue::from_str(value.as_ref())?;
         self.headers.insert(key, value);
         Ok(self)
-    }
-
-    pub fn with_sender(mut self, sender: Sender<SseEvent>) -> Self {
-        self.sender = Some(sender);
-        self
     }
 
     pub fn build(self) -> OMcpClient {
