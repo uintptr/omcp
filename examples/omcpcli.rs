@@ -1,19 +1,11 @@
-use async_trait::async_trait;
 use clap::{Parser, Subcommand};
 use log::{
     LevelFilter, {error, info},
 };
 use omcp::{
-    client::{
-        builder::OMcpClientBuilder,
-        io::{EventHandlerTrait, OMcpClient},
-        types::OMcpServerType,
-    },
+    client::{builder::OMcpClientBuilder, types::OMcpServerType},
     error::{Error, Result},
-    json_rpc::JsonRPCMessageBuilder,
 };
-
-use omcp::json_rpc::JsonRPCMessage;
 
 use rstaples::{logging::StaplesLogger, staples::printkv};
 
@@ -38,8 +30,8 @@ struct UserArgsDump {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Dumps the supported tools JSON
-    DumpTools(UserArgsDump),
+    /// List supported tools to JSON
+    ListTools(UserArgsDump),
     Call,
 }
 
@@ -48,23 +40,6 @@ enum Commands {
 struct UserArgs {
     #[command(subcommand)]
     command: Commands,
-}
-
-struct DumpHandler {}
-
-async fn send_tool_list_req(client: &OMcpClient) -> Result<()> {
-    let msg = JsonRPCMessageBuilder::new().with_id(2).with_method("tools/list").build();
-    client.send(&msg).await
-}
-
-#[async_trait]
-impl EventHandlerTrait for DumpHandler {
-    async fn event_handler(&self, msg: &JsonRPCMessage) -> Result<()> {
-        let msg_string = serde_json::to_string_pretty(msg)?;
-        println!("{msg_string}");
-        // we're done
-        Err(Error::Eof)
-    }
 }
 
 fn init_logger(verbose: bool, debug: bool) -> Result<()> {
@@ -85,7 +60,7 @@ fn init_logger(verbose: bool, debug: bool) -> Result<()> {
     Ok(())
 }
 
-async fn main_dump_tool(args: &UserArgsDump) -> Result<()> {
+async fn main_list_tool(args: &UserArgsDump) -> Result<()> {
     init_logger(args.verbose, args.debug)?;
 
     if args.verbose {
@@ -116,23 +91,27 @@ async fn main_dump_tool(args: &UserArgsDump) -> Result<()> {
 
     info!("connected to {}", args.server);
 
-    let dh = DumpHandler {};
-    send_tool_list_req(&client).await?;
-
-    let ret = client.event_loop(dh).await;
+    let ret = client.list_tools().await;
 
     let ret = match ret {
-        Ok(_) => Ok(()),
-        Err(Error::Eof) => Ok(()),
+        Ok(v) => {
+            let json_str = serde_json::to_string_pretty(&v)?;
+
+            println!("{json_str}");
+
+            Ok(())
+        }
         Err(e) => {
             error!("{e}");
             Err(e)
         }
     };
 
-    // don't really care about this failing but we want
+    // don't really care aboutthis failing but we want
     // return whatever the event loop returned
-    let _ = client.disconnect().await;
+    if let Err(e) = client.disconnect().await {
+        error!("{e}");
+    }
 
     ret
 }
@@ -142,7 +121,7 @@ async fn main() -> Result<()> {
     let args = UserArgs::parse();
 
     match args.command {
-        Commands::DumpTools(d) => main_dump_tool(&d).await,
+        Commands::ListTools(d) => main_list_tool(&d).await,
         Commands::Call => Err(Error::NotImplemented),
     }
 }

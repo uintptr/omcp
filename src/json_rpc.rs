@@ -108,6 +108,12 @@ impl JsonRPCInitParams {
     }
 }
 
+impl Default for JsonRPCInitParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JsonRPCMessage {}
 
 impl Default for JsonRPCMessageBuilder {

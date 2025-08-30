@@ -275,6 +275,11 @@ impl SseClient {
         self.send_message(&msg).await
     }
 
+    async fn send_list_tools(&self) -> Result<()> {
+        let msg = JsonRPCMessageBuilder::new().with_id(2).with_method("tools/list").build();
+        self.send_message(&msg).await
+    }
+
     async fn initialize_loop(&mut self) -> Result<()> {
         if let SseClienState::Ready = self.state {
             return Ok(());
@@ -318,6 +323,22 @@ impl SseClient {
                 }
             }
         }
+    }
+
+    pub async fn list_tools(&mut self) -> Result<JsonRPCMessage> {
+        self.send_list_tools().await?;
+
+        match self.event_rx.recv().await {
+            Some(v) => match v {
+                SseEvent::JsonRpcMessage(msg) => Ok(*msg),
+                _ => Err(Error::NotFound),
+            },
+            None => Err(Error::ConnectionFailure),
+        }
+    }
+
+    pub async fn call_tool(&mut self) -> Result<JsonRPCMessage> {
+        unimplemented!()
     }
 
     pub async fn event_loop<H>(&mut self, user_handler: H) -> Result<()>

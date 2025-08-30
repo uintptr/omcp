@@ -26,6 +26,7 @@ pub enum Error {
     EndpointMissing,
     Eof,
     ConnectionStateFailure,
+    NotFound,
 
     //
     // 2nd party

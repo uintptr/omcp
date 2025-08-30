@@ -30,6 +30,18 @@ impl OMcpClient {
         }
     }
 
+    pub async fn list_tools(&mut self) -> Result<JsonRPCMessage> {
+        match self {
+            OMcpClient::Sse(sse) => sse.list_tools().await,
+        }
+    }
+
+    pub async fn call_tool(&mut self) -> Result<JsonRPCMessage> {
+        match self {
+            OMcpClient::Sse(sse) => sse.call_tool().await,
+        }
+    }
+
     pub async fn event_loop<H>(&mut self, handler: H) -> Result<()>
     where
         H: EventHandlerTrait,
