@@ -1,10 +1,15 @@
 use async_trait::async_trait;
 
-use crate::{client::sse::SseClient, error::Result, json_rpc::JsonRPCMessage};
+use crate::{
+    client::{baked::BackedClient, sse::SseClient},
+    error::{Error, Result},
+    json_rpc::JsonRPCMessage,
+    types::McpTool,
+};
 
-#[derive(Debug)]
 pub enum OMcpClient {
     Sse(SseClient),
+    Baked(BackedClient),
 }
 #[async_trait]
 pub trait EventHandlerTrait {
@@ -15,30 +20,38 @@ impl OMcpClient {
     pub async fn connect(&mut self) -> Result<()> {
         match self {
             OMcpClient::Sse(sse) => sse.spawn_event_thread().await,
+            OMcpClient::Baked(_baked) => Ok(()),
         }
     }
 
     pub async fn send(&self, msg: &JsonRPCMessage) -> Result<()> {
         match self {
             OMcpClient::Sse(sse) => sse.send_message(msg).await,
+            OMcpClient::Baked(baked) => baked.send_message(msg),
         }
     }
 
     pub async fn disconnect(&mut self) -> Result<()> {
         match self {
             OMcpClient::Sse(sse) => sse.join_event_thread().await,
+            OMcpClient::Baked(_baked) => Ok(()),
         }
     }
 
-    pub async fn list_tools(&mut self) -> Result<JsonRPCMessage> {
+    pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
         match self {
             OMcpClient::Sse(sse) => sse.list_tools().await,
+            OMcpClient::Baked(baked) => baked.list_tools(),
         }
     }
 
-    pub async fn call_tool(&mut self) -> Result<JsonRPCMessage> {
+    pub async fn call_tool<S>(&mut self, name: S) -> Result<String>
+    where
+        S: AsRef<str>,
+    {
         match self {
-            OMcpClient::Sse(sse) => sse.call_tool().await,
+            OMcpClient::Sse(_sse) => Err(Error::NotImplemented),
+            OMcpClient::Baked(baked) => baked.call_tool(name),
         }
     }
 
@@ -48,6 +61,7 @@ impl OMcpClient {
     {
         match self {
             OMcpClient::Sse(sse) => sse.event_loop(handler).await,
+            OMcpClient::Baked(_baked) => Err(Error::NotImplemented),
         }
     }
 }

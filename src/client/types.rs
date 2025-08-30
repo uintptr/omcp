@@ -8,6 +8,12 @@ use log::debug;
 #[derive(Debug)]
 pub enum OMcpServerType {
     Sse,
+    Baked,
+}
+
+pub trait BakedMcpTool {
+    fn call(&mut self, name: &str) -> Result<String>;
+    fn implements(&self, name: &str) -> bool;
 }
 
 #[derive(Debug)]

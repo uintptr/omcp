@@ -150,6 +150,11 @@ impl JsonRPCMessageBuilder {
         self
     }
 
+    pub fn with_result(mut self, result: HashMap<String, Value>) -> Self {
+        self.inner.result = Some(result);
+        self
+    }
+
     pub fn build(self) -> JsonRPCMessage {
         self.inner
     }

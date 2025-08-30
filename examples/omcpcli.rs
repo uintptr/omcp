@@ -3,11 +3,16 @@ use log::{
     LevelFilter, {error, info},
 };
 use omcp::{
-    client::{builder::OMcpClientBuilder, types::OMcpServerType},
+    client::{
+        builder::OMcpClientBuilder,
+        types::{BakedMcpTool, OMcpServerType},
+    },
     error::{Error, Result},
 };
 
 use rstaples::{logging::StaplesLogger, staples::printkv};
+use serde::Serialize;
+use uname::uname;
 
 #[derive(Parser)]
 struct UserArgsDump {
@@ -32,7 +37,7 @@ struct UserArgsDump {
 enum Commands {
     /// List supported tools to JSON
     ListTools(UserArgsDump),
-    Call,
+    BakedUname,
 }
 
 #[derive(Parser)]
@@ -40,6 +45,50 @@ enum Commands {
 struct UserArgs {
     #[command(subcommand)]
     command: Commands,
+}
+
+#[derive(Serialize)]
+struct BakedUname {
+    sys_name: String,
+    node_name: String,
+    release: String,
+    version: String,
+    machine: String,
+}
+
+impl BakedUname {
+    pub fn new() -> Result<Self> {
+        let info = uname()?;
+
+        Ok(Self {
+            sys_name: info.sysname,
+            node_name: info.nodename,
+            release: info.release,
+            version: info.version,
+            machine: info.machine,
+        })
+    }
+
+    fn call_uname(&self) -> Result<String> {
+        let json_str = serde_json::to_string_pretty(&self)?;
+        Ok(json_str)
+    }
+}
+
+impl BakedMcpTool for BakedUname {
+    fn call(&mut self, name: &str) -> Result<String> {
+        match name {
+            "uname" => self.call_uname(),
+            _ => Err(Error::NotImplemented),
+        }
+    }
+
+    fn implements(&self, name: &str) -> bool {
+        match name {
+            "uname" => true,
+            _ => false,
+        }
+    }
 }
 
 fn init_logger(verbose: bool, debug: bool) -> Result<()> {
@@ -78,10 +127,10 @@ async fn main_list_tool(args: &UserArgsDump) -> Result<()> {
         }
     }
 
-    let builder = OMcpClientBuilder::new(&args.server, OMcpServerType::Sse);
+    let builder = OMcpClientBuilder::new(OMcpServerType::Sse).with_sse_url(&args.server);
 
     let builder = match &args.bearer {
-        Some(v) => builder.with_bearer(v)?,
+        Some(v) => builder.with_sse_bearer(v)?,
         None => builder,
     };
 
@@ -116,12 +165,28 @@ async fn main_list_tool(args: &UserArgsDump) -> Result<()> {
     ret
 }
 
+async fn main_baked_uname() -> Result<()> {
+    let uname = BakedUname::new()?;
+
+    init_logger(true, true)?;
+
+    let mut client = OMcpClientBuilder::new(OMcpServerType::Baked).with_baked_tool(uname).build();
+
+    match client.call_tool("uname").await {
+        Ok(v) => {
+            println!("{v}");
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = UserArgs::parse();
 
     match args.command {
         Commands::ListTools(d) => main_list_tool(&d).await,
-        Commands::Call => Err(Error::NotImplemented),
+        Commands::BakedUname => main_baked_uname().await,
     }
 }

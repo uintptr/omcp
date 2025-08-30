@@ -19,6 +19,7 @@ use crate::{
     },
     error::{Error, Result},
     json_rpc::{JsonRPCInitParams, JsonRPCMessage, JsonRPCMessageBuilder},
+    types::McpTool,
 };
 
 #[derive(Debug)]
@@ -325,20 +326,27 @@ impl SseClient {
         }
     }
 
-    pub async fn list_tools(&mut self) -> Result<JsonRPCMessage> {
+    pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
         self.send_list_tools().await?;
 
         match self.event_rx.recv().await {
             Some(v) => match v {
-                SseEvent::JsonRpcMessage(msg) => Ok(*msg),
+                SseEvent::JsonRpcMessage(msg) => {
+                    //
+                    // Get the tool portion
+                    //
+                    let mut results = msg.result.ok_or(Error::NotFound)?;
+
+                    let tool_value = results.remove("tools").ok_or(Error::NotFound)?;
+
+                    let tools: Vec<McpTool> = serde_json::from_value(tool_value)?;
+
+                    Ok(tools)
+                }
                 _ => Err(Error::NotFound),
             },
             None => Err(Error::ConnectionFailure),
         }
-    }
-
-    pub async fn call_tool(&mut self) -> Result<JsonRPCMessage> {
-        unimplemented!()
     }
 
     pub async fn event_loop<H>(&mut self, user_handler: H) -> Result<()>

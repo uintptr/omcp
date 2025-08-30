@@ -1,3 +1,4 @@
+mod baked;
 pub mod builder;
 pub mod io;
 mod sse;
