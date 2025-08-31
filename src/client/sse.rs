@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::atomic::AtomicU64, time::Duration};
 
 use log::{debug, error, info, warn};
 
@@ -18,8 +18,8 @@ use crate::{
         types::{SseEvent, SseEventEndpoint, SseWireEvent},
     },
     error::{Error, Result},
-    json_rpc::{JsonRPCInitParams, JsonRPCMessage, JsonRPCMessageBuilder},
-    types::McpTool,
+    json_rpc::{JsonRPCInitParams, JsonRPCMessage, JsonRPCMessageBuilder, JsonRPCParameters},
+    types::{McpParams, McpTool},
 };
 
 #[derive(Debug)]
@@ -40,6 +40,7 @@ pub struct SseClient {
     event_tx: Option<Sender<SseEvent>>,
     endpoint: Option<SseEventEndpoint>,
     state: SseClienState,
+    msg_id: AtomicU64,
 }
 
 const RX_BUFFER_SIZE: usize = 10;
@@ -162,6 +163,7 @@ impl SseClient {
             event_rx,
             endpoint: None,
             state: SseClienState::Uninitialized,
+            msg_id: AtomicU64::new(1),
         }
     }
 
@@ -240,13 +242,26 @@ impl SseClient {
         }
     }
 
-    pub async fn send_message(&self, msg: &JsonRPCMessage) -> Result<()> {
+    async fn recv_message(&mut self) -> Result<JsonRPCMessage> {
+        match self.event_rx.recv().await {
+            Some(v) => match v {
+                SseEvent::JsonRpcMessage(msg) => Ok(*msg),
+                _ => Err(Error::NotFound),
+            },
+            None => Err(Error::ConnectionFailure),
+        }
+    }
+
+    pub async fn send_message<M>(&self, msg: M) -> Result<()>
+    where
+        M: AsRef<JsonRPCMessage>,
+    {
         match &self.endpoint {
             Some(endpoint) => {
                 //
                 // we have to use a different http connection for this one
                 //
-                let json_msg = serde_json::to_string_pretty(msg)?;
+                let json_msg = serde_json::to_string_pretty(msg.as_ref())?;
 
                 debug!("sending: {json_msg}");
 
@@ -268,17 +283,17 @@ impl SseClient {
 
     async fn send_hello(&self) -> Result<()> {
         let msg = build_init_message()?;
-        self.send_message(&msg).await
+        self.send_message(msg).await
     }
 
     async fn send_initialized(&self) -> Result<()> {
         let msg = JsonRPCMessageBuilder::new().with_method("notifications/initialized").build();
-        self.send_message(&msg).await
+        self.send_message(msg).await
     }
 
     async fn send_list_tools(&self) -> Result<()> {
         let msg = JsonRPCMessageBuilder::new().with_id(2).with_method("tools/list").build();
-        self.send_message(&msg).await
+        self.send_message(msg).await
     }
 
     async fn initialize_loop(&mut self) -> Result<()> {
@@ -329,24 +344,40 @@ impl SseClient {
     pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
         self.send_list_tools().await?;
 
-        match self.event_rx.recv().await {
-            Some(v) => match v {
-                SseEvent::JsonRpcMessage(msg) => {
-                    //
-                    // Get the tool portion
-                    //
-                    let mut results = msg.result.ok_or(Error::NotFound)?;
+        let msg = self.recv_message().await?;
 
-                    let tool_value = results.remove("tools").ok_or(Error::NotFound)?;
+        let mut results = msg.result.ok_or(Error::NotFound)?;
 
-                    let tools: Vec<McpTool> = serde_json::from_value(tool_value)?;
+        let tool_value = results.remove("tools").ok_or(Error::NotFound)?;
 
-                    Ok(tools)
-                }
-                _ => Err(Error::NotFound),
-            },
-            None => Err(Error::ConnectionFailure),
-        }
+        let tools: Vec<McpTool> = serde_json::from_value(tool_value)?;
+
+        Ok(tools)
+    }
+
+    pub async fn call<P>(&mut self, mcp_params: P) -> Result<String>
+    where
+        P: AsRef<McpParams>,
+    {
+        let id = self.msg_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        let params: JsonRPCParameters = mcp_params.as_ref().try_into()?;
+
+        let msg = JsonRPCMessageBuilder::new()
+            .with_id(id)
+            .with_method("tools/call")
+            .with_parameter(params)
+            .build();
+
+        self.send_message(msg).await?;
+
+        let msg = self.recv_message().await?;
+
+        let results = msg.result.ok_or(Error::NotFound)?;
+
+        let results = serde_json::to_string_pretty(&results)?;
+
+        Ok(results)
     }
 
     pub async fn event_loop<H>(&mut self, user_handler: H) -> Result<()>

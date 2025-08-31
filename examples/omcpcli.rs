@@ -8,10 +8,12 @@ use omcp::{
         types::{BakedMcpTool, OMcpServerType},
     },
     error::{Error, Result},
+    types::McpParams,
 };
 
 use rstaples::{logging::StaplesLogger, staples::printkv};
 use serde::Serialize;
+use serde_json::Value;
 use uname::uname;
 
 #[derive(Parser)]
@@ -33,11 +35,31 @@ struct UserArgsDump {
     debug: bool,
 }
 
+#[derive(Parser)]
+struct UserArgsCall {
+    /// Server
+    #[arg(short, long)]
+    server: String,
+
+    /// Bearer Token
+    #[arg(short, long)]
+    bearer: Option<String>,
+
+    /// Verbose
+    #[arg(short, long)]
+    verbose: bool,
+
+    /// Tool name
+    #[arg(short, long)]
+    tool: String,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// List supported tools to JSON
     ListTools(UserArgsDump),
     BakedUname,
+    Call(UserArgsCall),
 }
 
 #[derive(Parser)]
@@ -109,7 +131,7 @@ fn init_logger(verbose: bool, debug: bool) -> Result<()> {
     Ok(())
 }
 
-async fn main_list_tool(args: &UserArgsDump) -> Result<()> {
+async fn main_list_tool(args: UserArgsDump) -> Result<()> {
     init_logger(args.verbose, args.debug)?;
 
     if args.verbose {
@@ -165,6 +187,60 @@ async fn main_list_tool(args: &UserArgsDump) -> Result<()> {
     ret
 }
 
+async fn main_call(args: UserArgsCall) -> Result<()> {
+    init_logger(args.verbose, false)?;
+
+    if args.verbose {
+        println!("MCP Dumper");
+        printkv("Server", &args.server);
+        printkv("Verbose", args.verbose);
+
+        if let Some(b) = &args.bearer {
+            // only display a little bit of the token to stdout
+            if let Some(first_five) = b.get(0..5) {
+                let first_five = format!("{}...", first_five);
+                printkv("Bearer", first_five)
+            }
+        }
+    }
+
+    let builder = OMcpClientBuilder::new(OMcpServerType::Sse).with_sse_url(&args.server);
+
+    let builder = match &args.bearer {
+        Some(v) => builder.with_sse_bearer(v)?,
+        None => builder,
+    };
+
+    let mut client = builder.build();
+
+    client.connect().await?;
+
+    info!("connected to {}", args.server);
+
+    let mut params = McpParams::new("HassTurnOff");
+    params.add_argument("area", Value::String("basement office".into()));
+
+    let domain = vec![Value::String("light".into())];
+
+    params.add_argument("domain", Value::Array(domain));
+
+    let results = client.call(params).await;
+
+    let ret = match results {
+        Ok(v) => {
+            println!("{v}");
+            Ok(())
+        }
+        Err(e) => Err(e),
+    };
+
+    if let Err(e) = client.disconnect().await {
+        error!("{e}");
+    }
+
+    ret
+}
+
 async fn main_baked_uname() -> Result<()> {
     let uname = BakedUname::new()?;
 
@@ -172,7 +248,9 @@ async fn main_baked_uname() -> Result<()> {
 
     let mut client = OMcpClientBuilder::new(OMcpServerType::Baked).with_baked_tool(uname).build();
 
-    match client.call_tool("uname").await {
+    let params = McpParams::new("uname");
+
+    match client.call(params).await {
         Ok(v) => {
             println!("{v}");
             Ok(())
@@ -186,7 +264,8 @@ async fn main() -> Result<()> {
     let args = UserArgs::parse();
 
     match args.command {
-        Commands::ListTools(d) => main_list_tool(&d).await,
+        Commands::ListTools(d) => main_list_tool(d).await,
         Commands::BakedUname => main_baked_uname().await,
+        Commands::Call(c) => main_call(c).await,
     }
 }

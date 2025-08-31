@@ -8,22 +8,6 @@ pub const JSON_RPC_PROTOCOL_VERSION: &str = "2025-03-26";
 pub const CLIENT_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/*
-let params_json = r#"{
-"protocolVersion": "2025-03-26",
-"capabilities": {
-  "roots": {
-    "listChanged": true
-  },
-  "sampling": {}
-},
-"clientInfo": {
-  "name": "omcp",
-  "version": "1.0.0"
-}}
-"#;
-*/
-
 #[derive(Serialize)]
 pub struct JsonRPCRoots {
     #[serde(rename = "listChanged")]
@@ -69,6 +53,8 @@ pub struct JsonRPCMessageBuilder {
     inner: JsonRPCMessage,
 }
 
+pub type JsonRPCParameters = HashMap<String, Value>;
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct JsonRPCMessage {
     pub jsonrpc: String,
@@ -80,7 +66,7 @@ pub struct JsonRPCMessage {
     pub result: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "params")]
-    pub parameters: Option<HashMap<String, Value>>,
+    pub parameters: Option<JsonRPCParameters>,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -115,6 +101,12 @@ impl Default for JsonRPCInitParams {
 }
 
 impl JsonRPCMessage {}
+
+impl AsRef<JsonRPCMessage> for JsonRPCMessage {
+    fn as_ref(&self) -> &JsonRPCMessage {
+        self
+    }
+}
 
 impl Default for JsonRPCMessageBuilder {
     fn default() -> Self {

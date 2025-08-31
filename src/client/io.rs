@@ -4,7 +4,7 @@ use crate::{
     client::{baked::BackedClient, sse::SseClient},
     error::{Error, Result},
     json_rpc::JsonRPCMessage,
-    types::McpTool,
+    types::{McpParams, McpTool},
 };
 
 pub enum OMcpClient {
@@ -45,13 +45,13 @@ impl OMcpClient {
         }
     }
 
-    pub async fn call_tool<S>(&mut self, name: S) -> Result<String>
+    pub async fn call<P>(&mut self, mcp_params: P) -> Result<String>
     where
-        S: AsRef<str>,
+        P: AsRef<McpParams>,
     {
         match self {
-            OMcpClient::Sse(_sse) => Err(Error::NotImplemented),
-            OMcpClient::Baked(baked) => baked.call_tool(name),
+            OMcpClient::Sse(sse) => sse.call(mcp_params).await,
+            OMcpClient::Baked(baked) => baked.call_tool(&mcp_params.as_ref().tool_name),
         }
     }
 
