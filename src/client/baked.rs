@@ -1,38 +1,45 @@
 use crate::{
-    client::{builder::OMcpClientBuilder, types::BakedMcpTool},
+    client::{io::OMcpClientTrait, types::BakedMcpToolTrait},
     error::{Error, Result},
-    json_rpc::JsonRPCMessage,
-    types::McpTool,
+    types::{McpParams, McpTool},
 };
+use async_trait::async_trait;
 
-pub struct BackedClient {
-    baked_tools: Vec<Box<dyn BakedMcpTool>>,
+pub struct BackedClient<E> {
+    handler: Box<dyn BakedMcpToolTrait<Error = E>>,
 }
 
-impl BackedClient {
-    pub fn from_builder(builder: OMcpClientBuilder) -> Self {
-        BackedClient {
-            baked_tools: builder.baked_tools,
-        }
-    }
-
-    pub fn send_message(&self, _msg: &JsonRPCMessage) -> Result<()> {
-        todo!()
-    }
-
-    pub fn list_tools(&self) -> Result<Vec<McpTool>> {
-        todo!()
-    }
-
-    pub fn call_tool<S>(&mut self, name: S) -> Result<String>
+impl<E: std::fmt::Display + 'static> BackedClient<E> {
+    pub fn new<H>(handler: H) -> Box<dyn OMcpClientTrait>
     where
-        S: AsRef<str>,
+        H: BakedMcpToolTrait<Error = E> + 'static,
     {
-        for t in self.baked_tools.iter_mut() {
-            if t.implements(name.as_ref()) {
-                return t.call(name.as_ref());
+        let b = Self {
+            handler: Box::new(handler),
+        };
+
+        Box::new(b)
+    }
+}
+
+#[async_trait(?Send)]
+impl<E: std::fmt::Display> OMcpClientTrait for BackedClient<E> {
+    async fn connect(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn disconnect(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
+        Err(Error::NotImplemented)
+    }
+    async fn call(&mut self, mcp_params: &McpParams) -> Result<String> {
+        match self.handler.call(mcp_params) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                let err_msg = format!("{e}");
+                Err(Error::FunctionCallFailure { error: err_msg })
             }
         }
-        Err(Error::NotFound)
     }
 }

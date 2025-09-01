@@ -27,6 +27,9 @@ pub enum Error {
     Eof,
     ConnectionStateFailure,
     NotFound,
+    FunctionCallFailure {
+        error: String,
+    },
 
     //
     // 2nd party

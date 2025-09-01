@@ -4,7 +4,9 @@ use log::{
 };
 use omcp::{
     client::{
+        baked::BackedClient,
         builder::OMcpClientBuilder,
+        io::OMcpClientTrait,
         types::{BakedMcpTool, OMcpServerType},
     },
     error::{Error, Result},
@@ -91,25 +93,17 @@ impl BakedUname {
         })
     }
 
-    fn call_uname(&self) -> Result<String> {
+    fn to_json(&self) -> Result<String> {
         let json_str = serde_json::to_string_pretty(&self)?;
         Ok(json_str)
     }
 }
 
 impl BakedMcpTool for BakedUname {
-    fn call(&mut self, name: &str) -> Result<String> {
-        match name {
-            "uname" => self.call_uname(),
-            _ => Err(Error::NotImplemented),
-        }
-    }
+    type Error = Error;
 
-    fn implements(&self, name: &str) -> bool {
-        match name {
-            "uname" => true,
-            _ => false,
-        }
+    fn call(&mut self, _params: &McpParams) -> Result<String> {
+        self.to_json()
     }
 }
 
@@ -224,7 +218,7 @@ async fn main_call(args: UserArgsCall) -> Result<()> {
 
     params.add_argument("domain", Value::Array(domain));
 
-    let results = client.call(params).await;
+    let results = client.call(&params).await;
 
     let ret = match results {
         Ok(v) => {
@@ -246,11 +240,11 @@ async fn main_baked_uname() -> Result<()> {
 
     init_logger(true, true)?;
 
-    let mut client = OMcpClientBuilder::new(OMcpServerType::Baked).with_baked_tool(uname).build();
+    let mut client = BackedClient::new(uname);
 
     let params = McpParams::new("uname");
 
-    match client.call(params).await {
+    match client.call(&params).await {
         Ok(v) => {
             println!("{v}");
             Ok(())

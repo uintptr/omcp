@@ -1,6 +1,7 @@
 use crate::{
     error::{Error, Result},
     json_rpc::JsonRPCMessage,
+    types::McpParams,
 };
 
 use log::debug;
@@ -11,9 +12,9 @@ pub enum OMcpServerType {
     Baked,
 }
 
-pub trait BakedMcpTool {
-    fn call(&mut self, name: &str) -> Result<String>;
-    fn implements(&self, name: &str) -> bool;
+pub trait BakedMcpToolTrait {
+    type Error;
+    fn call(&mut self, params: &McpParams) -> core::result::Result<String, Self::Error>;
 }
 
 #[derive(Debug)]

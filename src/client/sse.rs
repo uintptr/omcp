@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::atomic::AtomicU64, time::Duration};
 
+use async_trait::async_trait;
 use log::{debug, error, info, warn};
 
 use reqwest::{Client, Response, header::HeaderMap};
@@ -14,7 +15,7 @@ use tokio::{
 use crate::{
     client::{
         builder::OMcpClientBuilder,
-        io::EventHandlerTrait,
+        io::OMcpClientTrait,
         types::{SseEvent, SseEventEndpoint, SseWireEvent},
     },
     error::{Error, Result},
@@ -167,7 +168,7 @@ impl SseClient {
         }
     }
 
-    pub async fn spawn_event_thread(&mut self) -> Result<()> {
+    async fn spawn_event_thread(&mut self) -> Result<()> {
         let (quit_tx, mut quit_rx) = mpsc::channel(1);
 
         // so we can reconnect
@@ -226,7 +227,7 @@ impl SseClient {
         Ok(())
     }
 
-    pub async fn join_event_thread(&mut self) -> Result<()> {
+    async fn join_event_thread(&mut self) -> Result<()> {
         match self.quit_tx.take() {
             Some(tx) => match tx.send(()).await {
                 Ok(_) => match self.event_thread.take() {
@@ -340,8 +341,17 @@ impl SseClient {
             }
         }
     }
+}
 
-    pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
+#[async_trait(?Send)]
+impl OMcpClientTrait for SseClient {
+    async fn connect(&mut self) -> Result<()> {
+        self.spawn_event_thread().await
+    }
+    async fn disconnect(&mut self) -> Result<()> {
+        self.join_event_thread().await
+    }
+    async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
         self.send_list_tools().await?;
 
         let msg = self.recv_message().await?;
@@ -354,11 +364,7 @@ impl SseClient {
 
         Ok(tools)
     }
-
-    pub async fn call<P>(&mut self, mcp_params: P) -> Result<String>
-    where
-        P: AsRef<McpParams>,
-    {
+    async fn call(&mut self, mcp_params: &McpParams) -> Result<String> {
         let id = self.msg_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         let params: JsonRPCParameters = mcp_params.as_ref().try_into()?;
@@ -378,49 +384,5 @@ impl SseClient {
         let results = serde_json::to_string_pretty(&results)?;
 
         Ok(results)
-    }
-
-    pub async fn event_loop<H>(&mut self, user_handler: H) -> Result<()>
-    where
-        H: EventHandlerTrait,
-    {
-        loop {
-            self.initialize_loop().await?;
-
-            select! {
-                ret = self.event_rx.recv() => {
-                    match ret{
-                        Some(event) => {
-                            match event{
-                                //
-                                // In case the socket dies and the whole thing
-                                // needs to re-initialize
-                                //
-                                SseEvent::Endpoint(e) => {
-                                    self.endpoint = Some(e);
-                                    self.state = SseClienState::Uninitialized;
-                                    self.send_hello().await?;
-                                    self.state = SseClienState::Initialized;
-                                    //
-                                    // So we go back into the initialize_loop
-                                    //
-                                    break;
-                                }
-                                SseEvent::JsonRpcMessage(msg) => {
-                                    user_handler.event_handler(&msg).await?
-                                }
-                            }
-                        }
-                        None => {
-                            warn!("empty message");
-                            break;
-                        }
-                    }
-                }
-
-            }
-        }
-
-        Ok(())
     }
 }

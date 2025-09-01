@@ -3,12 +3,7 @@ use std::str::FromStr;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use crate::{
-    client::{
-        baked::BackedClient,
-        io::OMcpClient,
-        sse::SseClient,
-        types::{BakedMcpTool, OMcpServerType},
-    },
+    client::{io::OMcpClientTrait, sse::SseClient, types::OMcpServerType},
     error::Result,
 };
 
@@ -16,7 +11,6 @@ pub struct OMcpClientBuilder {
     pub url: String,
     pub server_type: OMcpServerType,
     pub headers: HeaderMap,
-    pub baked_tools: Vec<Box<dyn BakedMcpTool>>,
 }
 
 impl OMcpClientBuilder {
@@ -25,7 +19,6 @@ impl OMcpClientBuilder {
             url: "".into(),
             server_type,
             headers: HeaderMap::new(),
-            baked_tools: Vec::new(),
         }
     }
 
@@ -56,23 +49,14 @@ impl OMcpClientBuilder {
         Ok(self)
     }
 
-    pub fn with_baked_tool<T>(mut self, tool: T) -> Self
-    where
-        T: BakedMcpTool + 'static,
-    {
-        self.baked_tools.push(Box::new(tool));
-        self
-    }
-
-    pub fn build(self) -> OMcpClient {
+    pub fn build(self) -> Box<dyn OMcpClientTrait> {
         match self.server_type {
             OMcpServerType::Sse => {
                 let sse = SseClient::from_builder(self);
-                OMcpClient::Sse(sse)
+                Box::new(sse)
             }
             OMcpServerType::Baked => {
-                let baked = BackedClient::from_builder(self);
-                OMcpClient::Baked(baked)
+                todo!()
             }
         }
     }
