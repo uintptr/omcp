@@ -5,11 +5,11 @@ use crate::{
 };
 use async_trait::async_trait;
 
-pub struct BackedClient<E> {
+pub struct BakedClient<E> {
     handler: Box<dyn BakedMcpToolTrait<Error = E>>,
 }
 
-impl<E: std::fmt::Display + 'static> BackedClient<E> {
+impl<E: std::fmt::Display + 'static> BakedClient<E> {
     pub fn new<H>(handler: H) -> Box<dyn OMcpClientTrait>
     where
         H: BakedMcpToolTrait<Error = E> + 'static,
@@ -23,7 +23,7 @@ impl<E: std::fmt::Display + 'static> BackedClient<E> {
 }
 
 #[async_trait(?Send)]
-impl<E: std::fmt::Display> OMcpClientTrait for BackedClient<E> {
+impl<E: std::fmt::Display> OMcpClientTrait for BakedClient<E> {
     async fn connect(&mut self) -> Result<()> {
         Ok(())
     }

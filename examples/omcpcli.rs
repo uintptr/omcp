@@ -4,10 +4,9 @@ use log::{
 };
 use omcp::{
     client::{
-        baked::BackedClient,
+        baked::BakedClient,
         builder::OMcpClientBuilder,
-        io::OMcpClientTrait,
-        types::{BakedMcpTool, OMcpServerType},
+        types::{BakedMcpToolTrait, OMcpServerType},
     },
     error::{Error, Result},
     types::McpParams,
@@ -99,7 +98,7 @@ impl BakedUname {
     }
 }
 
-impl BakedMcpTool for BakedUname {
+impl BakedMcpToolTrait for BakedUname {
     type Error = Error;
 
     fn call(&mut self, _params: &McpParams) -> Result<String> {
@@ -240,7 +239,7 @@ async fn main_baked_uname() -> Result<()> {
 
     init_logger(true, true)?;
 
-    let mut client = BackedClient::new(uname);
+    let mut client = BakedClient::new(uname);
 
     let params = McpParams::new("uname");
 
