@@ -65,6 +65,10 @@ impl McpParams {
     {
         self.arguments.insert(name.as_ref().to_string(), value);
     }
+
+    pub fn set_argument(&mut self, args: McpArguments) {
+        self.arguments = args
+    }
 }
 
 impl AsRef<McpParams> for McpParams {
@@ -103,7 +107,7 @@ pub struct McpToolSchema {
 pub struct McpTool {
     pub name: String,
     pub description: String,
-    #[serde(rename = "inputSchema")]
+    #[serde(rename(serialize = "input_schema", deserialize = "inputSchema"))]
     pub input_schema: Option<McpToolSchema>,
 }
 
