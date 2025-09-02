@@ -8,7 +8,7 @@ use crate::{
     json_rpc::JsonRPCParameters,
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum ToolType {
     #[serde(rename = "object")]
     Object,
@@ -73,7 +73,7 @@ impl AsRef<McpParams> for McpParams {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct McpToolProperty {
     #[serde(rename = "type")]
     pub property_type: ToolType,
@@ -86,7 +86,7 @@ pub struct McpToolProperty {
     pub enums: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct McpToolSchema {
     #[serde(rename = "type")]
     pub schema_type: ToolType,
@@ -99,7 +99,7 @@ pub struct McpToolSchema {
     pub enums: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct McpTool {
     pub name: String,
     pub description: String,
@@ -111,6 +111,14 @@ pub struct McpTool {
 pub enum McpTypes {
     #[serde(rename = "sse")]
     Sse,
+}
+
+impl std::fmt::Display for McpTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            McpTypes::Sse => write!(f, "sse"),
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
