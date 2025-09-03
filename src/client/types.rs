@@ -1,10 +1,10 @@
 use crate::{
     error::{Error, Result},
-    json_rpc::JsonRPCMessage,
+    json_rpc::{JsonRPCMessage, JsonRPCMessageBuilder},
     types::McpParams,
 };
 
-use log::debug;
+use log::{debug, error};
 
 #[derive(Debug)]
 pub enum OMcpServerType {
@@ -80,7 +80,14 @@ impl TryFrom<SseWireEvent<'_>> for SseEvent {
                 Ok(SseEvent::Endpoint(endpoint))
             }
             "message" => {
-                let msg: JsonRPCMessage = serde_json::from_str(raw.data)?;
+                let msg: JsonRPCMessage = match serde_json::from_str(raw.data) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!("{e}");
+                        JsonRPCMessageBuilder::new().with_error(1, "deserialization failue").build()
+                    }
+                };
+
                 Ok(SseEvent::JsonRpcMessage(Box::new(msg)))
             }
             _ => Err(Error::EventTypeNotImplemented {

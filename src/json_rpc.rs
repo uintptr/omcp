@@ -53,6 +53,12 @@ pub struct JsonRPCMessageBuilder {
     inner: JsonRPCMessage,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct JsonRPCError {
+    code: u64,
+    message: String,
+}
+
 pub type JsonRPCParameters = HashMap<String, Value>;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -64,6 +70,8 @@ pub struct JsonRPCMessage {
     pub method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<HashMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonRPCError>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "params")]
     pub parameters: Option<JsonRPCParameters>,
@@ -144,6 +152,19 @@ impl JsonRPCMessageBuilder {
 
     pub fn with_result(mut self, result: HashMap<String, Value>) -> Self {
         self.inner.result = Some(result);
+        self
+    }
+
+    pub fn with_error<S>(mut self, code: u64, message: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        let error = JsonRPCError {
+            code,
+            message: message.as_ref().to_string(),
+        };
+
+        self.inner.error = Some(error);
         self
     }
 

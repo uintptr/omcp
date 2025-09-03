@@ -146,6 +146,32 @@ fn build_init_message() -> Result<JsonRPCMessage> {
     Ok(b.build())
 }
 
+async fn read_all(response: &mut Response) -> Result<Vec<u8>> {
+    let mut vec: Vec<u8> = Vec::new();
+
+    loop {
+        match response.chunk().await {
+            Ok(v) => match v {
+                Some(data) => {
+                    let data = data.to_vec();
+                    vec.extend(data);
+
+                    if vec.ends_with(b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                None => break,
+            },
+            Err(e) => {
+                error!("{e}");
+                return Err(e.into());
+            }
+        }
+    }
+
+    Ok(vec)
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // IMPL
 ///////////////////////////////////////////////////////////////////////////////
@@ -193,14 +219,17 @@ impl SseClient {
                         break
                     }
                     Ok(new_connection) = sse_reconnect(&client, &server, &headers), if !connected => {
-                        //stream = response.bytes_stream();
                         response = new_connection;
                         connected = true;
                     }
-                    item = response.chunk(), if connected => {
+                    item = read_all(&mut response), if connected => {
                         match item{
-                            Ok(Some(chunk)) => sse_parse(&server, &sender, &chunk).await?,
-                            Ok(None) => {} // nothing to read?
+                            Ok(v) => match sse_parse(&server, &sender, &v).await{
+                                Ok(_) => {},
+                                Err(e) => {
+                                    error!("{e}");
+                                }
+                            }
                             Err(e) => {
                                 error!("{e}");
                                 connected = false;
@@ -209,6 +238,9 @@ impl SseClient {
                     }
                 }
             }
+
+            warn!("event loop is returning");
+
             Ok(())
         });
 
@@ -375,14 +407,18 @@ impl OMcpClientTrait for SseClient {
             .with_parameter(params)
             .build();
 
-        self.send_message(msg).await?;
+        if let Err(e) = self.send_message(msg).await {
+            error!("{e}");
+            return Ok(format!("Error: {e}"));
+        }
 
-        let msg = self.recv_message().await?;
-
-        let results = msg.result.ok_or(Error::NotFound)?;
-
-        let results = serde_json::to_string_pretty(&results)?;
-
-        Ok(results)
+        match self.recv_message().await {
+            Ok(v) => {
+                let results = v.result.ok_or(Error::NotFound)?;
+                let results = serde_json::to_string_pretty(&results)?;
+                Ok(results)
+            }
+            Err(e) => Ok(format!("Error: {e}")),
+        }
     }
 }

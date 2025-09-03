@@ -181,7 +181,7 @@ async fn main_list_tool(args: UserArgsDump) -> Result<()> {
 }
 
 async fn main_call(args: UserArgsCall) -> Result<()> {
-    init_logger(args.verbose, false)?;
+    init_logger(args.verbose, true)?;
 
     if args.verbose {
         println!("MCP Dumper");
@@ -210,8 +210,7 @@ async fn main_call(args: UserArgsCall) -> Result<()> {
 
     info!("connected to {}", args.server);
 
-    let mut params = McpParams::new("HassTurnOff");
-    params.add_argument("area", Value::String("basement office".into()));
+    let mut params = McpParams::new(args.tool);
 
     let domain = vec![Value::String("light".into())];
 
