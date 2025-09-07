@@ -1,16 +1,10 @@
-use std::{collections::HashMap, sync::atomic::AtomicU64, time::Duration};
+use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 use async_trait::async_trait;
-use log::{debug, error, info, warn};
+use log::{debug, error};
 
 use reqwest::{Client, Response, header::HeaderMap};
 use serde_json::Value;
-use tokio::{
-    select, spawn,
-    sync::mpsc::{self, Receiver, Sender},
-    task::JoinHandle,
-    time::sleep,
-};
 
 use crate::{
     client::{
@@ -24,7 +18,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-enum SseClienState {
+enum SseClientState {
     Uninitialized,
     Initialized,
     Ready,
@@ -35,29 +29,26 @@ pub struct SseClient {
     client: Client,
     server: String,
     headers: HeaderMap,
-    event_thread: Option<JoinHandle<Result<()>>>,
-    quit_tx: Option<Sender<()>>,
-    event_rx: Receiver<SseEvent>,
-    event_tx: Option<Sender<SseEvent>>,
     endpoint: Option<SseEventEndpoint>,
-    state: SseClienState,
+    state: SseClientState,
     msg_id: AtomicU64,
+    response: Option<Response>,
 }
-
-const RX_BUFFER_SIZE: usize = 10;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Private Functions
 ///////////////////////////////////////////////////////////////////////////////
 
-pub fn sse_parse_wire(server: &str, data: &[u8]) -> Result<Vec<SseEvent>> {
-    let mut events: Vec<SseEvent> = Vec::new();
-
-    let data = str::from_utf8(data)?;
+pub fn sse_parse_wire<S, D>(server: S, data: D) -> Result<SseEvent>
+where
+    S: AsRef<str>,
+    D: AsRef<[u8]>,
+{
+    let data = str::from_utf8(data.as_ref())?;
 
     let lines: Vec<&str> = data.lines().collect();
 
-    let mut wire = SseWireEvent::new(server);
+    let mut wire = SseWireEvent::new(server.as_ref());
 
     for line in lines {
         if line.is_empty() {
@@ -79,12 +70,11 @@ pub fn sse_parse_wire(server: &str, data: &[u8]) -> Result<Vec<SseEvent>> {
 
         if !wire.data.is_empty() && !wire.event.is_empty() {
             let event: SseEvent = wire.try_into()?;
-            events.push(event);
-            wire = SseWireEvent::new(server);
+            return Ok(event);
         }
     }
 
-    Ok(events)
+    Err(Error::NotFound)
 }
 
 async fn sse_http_connect<U>(client: &Client, url: U, headers: &HeaderMap) -> Result<Response>
@@ -99,37 +89,6 @@ where
         true => Ok(response),
         false => Err(Error::ConnectionFailure),
     }
-}
-
-pub async fn sse_reconnect<U>(client: &Client, url: U, headers: &HeaderMap) -> Result<Response>
-where
-    U: AsRef<str>,
-{
-    loop {
-        match sse_http_connect(client, &url, headers).await {
-            Ok(v) => return Ok(v),
-            Err(e) => {
-                error!("{e}");
-                info!("reconnecting...");
-                sleep(Duration::from_secs(1)).await;
-            }
-        }
-    }
-}
-
-async fn sse_parse(url: &str, sender: &Sender<SseEvent>, data: &[u8]) -> Result<()> {
-    let events = sse_parse_wire(url, data)?;
-
-    debug!("found {} events", events.len());
-
-    for evt in events {
-        if let Err(e) = sender.send(evt).await {
-            error!("{e}");
-            return Err(Error::EventSendFailure);
-        }
-    }
-
-    Ok(())
 }
 
 fn build_init_message() -> Result<JsonRPCMessage> {
@@ -178,113 +137,28 @@ async fn read_all(response: &mut Response) -> Result<Vec<u8>> {
 
 impl SseClient {
     pub fn from_builder(builder: OMcpClientBuilder) -> Self {
-        let (event_tx, event_rx) = mpsc::channel::<SseEvent>(RX_BUFFER_SIZE);
-
         SseClient {
             client: Client::new(),
             server: builder.url,
             headers: builder.headers,
-            event_thread: None,
-            quit_tx: None,
-            event_tx: Some(event_tx),
-            event_rx,
             endpoint: None,
-            state: SseClienState::Uninitialized,
+            state: SseClientState::Uninitialized,
             msg_id: AtomicU64::new(1),
+            response: None,
         }
     }
 
-    async fn spawn_event_thread(&mut self) -> Result<()> {
-        let (quit_tx, mut quit_rx) = mpsc::channel(1);
+    pub async fn recv_message(&mut self) -> Result<JsonRPCMessage> {
+        let data = match self.response.as_mut() {
+            Some(v) => read_all(v).await?,
+            None => return Err(Error::NotConnected),
+        };
 
-        // so we can reconnect
-        let client = Client::new();
-        let mut response = sse_http_connect(&client, &self.server, &self.headers).await?;
-
-        let sender = self.event_tx.take().ok_or(Error::MissingSender)?;
-
-        //
-        // Now it's connected and messages from now on should be jrpcs
-        //
-        let server = self.server.clone();
-        let headers = self.headers.clone();
-
-        let event_thread = spawn(async move {
-            let mut connected = true;
-
-            loop {
-                tokio::select! {
-                    _ = quit_rx.recv() => {
-                        info!("quit requested");
-                        break
-                    }
-                    Ok(new_connection) = sse_reconnect(&client, &server, &headers), if !connected => {
-                        response = new_connection;
-                        connected = true;
-                    }
-                    item = read_all(&mut response), if connected => {
-                        match item{
-                            Ok(v) => match sse_parse(&server, &sender, &v).await{
-                                Ok(_) => {},
-                                Err(e) => {
-                                    error!("{e}");
-                                }
-                            }
-                            Err(e) => {
-                                error!("{e}");
-                                connected = false;
-                            }
-                        }
-                    }
-                }
-            }
-
-            warn!("event loop is returning");
-
-            Ok(())
-        });
-
-        self.event_thread = Some(event_thread);
-        self.quit_tx = Some(quit_tx);
-
-        //
-        // Make sure it's ready to accept commands from
-        // the user
-        //
-        self.initialize_loop().await?;
-
-        //
-        // Wait until we're initialized
-        //
-        Ok(())
-    }
-
-    async fn join_event_thread(&mut self) -> Result<()> {
-        match self.quit_tx.take() {
-            Some(tx) => match tx.send(()).await {
-                Ok(_) => match self.event_thread.take() {
-                    Some(v) => v.await?,
-                    None => Ok(()),
-                },
-                Err(e) => {
-                    error!("{e}");
-                    Err(Error::QuitSignalFailure)
-                }
-            },
-            None => Ok(()),
+        match self.sse_parse(data)? {
+            SseEvent::Endpoint(_e) => Err(Error::NotConnected),
+            SseEvent::JsonRpcMessage(msg) => Ok(*msg),
         }
     }
-
-    async fn recv_message(&mut self) -> Result<JsonRPCMessage> {
-        match self.event_rx.recv().await {
-            Some(v) => match v {
-                SseEvent::JsonRpcMessage(msg) => Ok(*msg),
-                _ => Err(Error::NotFound),
-            },
-            None => Err(Error::ConnectionFailure),
-        }
-    }
-
     pub async fn send_message<M>(&self, msg: M) -> Result<()>
     where
         M: AsRef<JsonRPCMessage>,
@@ -314,6 +188,56 @@ impl SseClient {
         }
     }
 
+    fn sse_parse<D>(&mut self, data: D) -> Result<SseEvent>
+    where
+        D: AsRef<[u8]>,
+    {
+        sse_parse_wire(&self.server, data)
+    }
+
+    //
+    // This'll also handle reconnections
+    //
+    async fn init_connection(&mut self) -> Result<()> {
+        loop {
+            //
+            // server sends a hello message first
+            //
+            let data = match self.response.as_mut() {
+                Some(v) => read_all(v).await?,
+                None => break Err(Error::NotConnected),
+            };
+
+            let event = self.sse_parse(data)?;
+
+            match event {
+                SseEvent::Endpoint(e) => {
+                    self.state = SseClientState::Uninitialized;
+                    self.endpoint = Some(e);
+                }
+                SseEvent::JsonRpcMessage(_msg) => {}
+            }
+
+            //
+            // we have a msg
+            //
+            match self.state {
+                SseClientState::Uninitialized => {
+                    self.state = SseClientState::Initialized;
+                    self.send_hello().await?;
+                }
+                SseClientState::Initialized => {
+                    self.send_initialized().await?;
+                    self.state = SseClientState::Ready;
+                    break Ok(());
+                }
+                SseClientState::Ready => {
+                    break Ok(());
+                }
+            }
+        }
+    }
+
     async fn send_hello(&self) -> Result<()> {
         let msg = build_init_message()?;
         self.send_message(msg).await
@@ -328,60 +252,20 @@ impl SseClient {
         let msg = JsonRPCMessageBuilder::new().with_id(2).with_method("tools/list").build();
         self.send_message(msg).await
     }
-
-    async fn initialize_loop(&mut self) -> Result<()> {
-        if let SseClienState::Ready = self.state {
-            return Ok(());
-        }
-
-        loop {
-            select! {
-                ret = self.event_rx.recv() => {
-                    match ret{
-                        Some(event) => {
-                            match event{
-                                SseEvent::Endpoint(e) => {
-                                    self.endpoint = Some(e);
-                                    self.state = SseClienState::Uninitialized;
-                                    self.send_hello().await?;
-                                    self.state = SseClienState::Initialized;
-                                }
-                                SseEvent::JsonRpcMessage(_msg) => {
-
-                                    match self.state {
-                                        SseClienState::Uninitialized => {
-                                            break Err(Error::ConnectionStateFailure);
-                                        }
-                                        SseClienState::Initialized => {
-                                            self.send_initialized().await?;
-                                            self.state = SseClienState::Ready;
-                                            break Ok(())
-                                        }
-                                        SseClienState::Ready => {
-                                            break Err(Error::ConnectionStateFailure);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            warn!("empty message");
-                            break Err(Error::ConnectionStateFailure);
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[async_trait(?Send)]
 impl OMcpClientTrait for SseClient {
     async fn connect(&mut self) -> Result<()> {
-        self.spawn_event_thread().await
+        let response = sse_http_connect(&self.client, &self.server, &self.headers).await?;
+        self.response = Some(response);
+
+        self.init_connection().await?;
+
+        Ok(())
     }
     async fn disconnect(&mut self) -> Result<()> {
-        self.join_event_thread().await
+        Ok(())
     }
     async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
         self.send_list_tools().await?;
@@ -392,7 +276,15 @@ impl OMcpClientTrait for SseClient {
 
         let tool_value = results.remove("tools").ok_or(Error::NotFound)?;
 
-        let tools: Vec<McpTool> = serde_json::from_value(tool_value)?;
+        dbg!(&tool_value);
+
+        let tools: Vec<McpTool> = match serde_json::from_value(tool_value) {
+            Ok(v) => v,
+            Err(e) => {
+                error!("{e}");
+                return Err(e.into());
+            }
+        };
 
         Ok(tools)
     }

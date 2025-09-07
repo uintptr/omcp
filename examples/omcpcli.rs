@@ -14,7 +14,6 @@ use omcp::{
 
 use rstaples::{logging::StaplesLogger, staples::printkv};
 use serde::Serialize;
-use serde_json::Value;
 use uname::uname;
 
 #[derive(Parser)]
@@ -210,11 +209,7 @@ async fn main_call(args: UserArgsCall) -> Result<()> {
 
     info!("connected to {}", args.server);
 
-    let mut params = McpParams::new(args.tool);
-
-    let domain = vec![Value::String("light".into())];
-
-    params.add_argument("domain", Value::Array(domain));
+    let params = McpParams::new(args.tool);
 
     let results = client.call(&params).await;
 
