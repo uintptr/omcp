@@ -276,8 +276,6 @@ impl OMcpClientTrait for SseClient {
 
         let tool_value = results.remove("tools").ok_or(Error::NotFound)?;
 
-        dbg!(&tool_value);
-
         let tools: Vec<McpTool> = match serde_json::from_value(tool_value) {
             Ok(v) => v,
             Err(e) => {
