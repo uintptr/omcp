@@ -1,6 +1,8 @@
 use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt};
 use log::{debug, error};
 
 use reqwest::{Client, Response, header::HeaderMap};
@@ -24,7 +26,9 @@ enum SseClientState {
     Ready,
 }
 
-#[derive(Debug)]
+//type BytesStream = Pin<Box<dyn Stream<Item = core::result::Result<Bytes, reqwest::Error>> + Send>>;
+type BytesStream = std::pin::Pin<Box<dyn Stream<Item = core::result::Result<Bytes, reqwest::Error>>>>;
+
 pub struct SseClient {
     client: Client,
     server: String,
@@ -32,7 +36,7 @@ pub struct SseClient {
     endpoint: Option<SseEventEndpoint>,
     state: SseClientState,
     msg_id: AtomicU64,
-    response: Option<Response>,
+    stream: Option<BytesStream>,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -105,26 +109,24 @@ fn build_init_message() -> Result<JsonRPCMessage> {
     Ok(b.build())
 }
 
-async fn read_all(response: &mut Response) -> Result<Vec<u8>> {
+async fn read_all(stream: &mut BytesStream) -> Result<Vec<u8>> {
     let mut vec: Vec<u8> = Vec::new();
 
     loop {
-        match response.chunk().await {
-            Ok(v) => match v {
-                Some(data) => {
-                    let data = data.to_vec();
-                    vec.extend(data);
+        match stream.next().await {
+            Some(Ok(v)) => {
+                let data = v.to_vec();
+                vec.extend(data);
 
-                    if vec.ends_with(b"\r\n\r\n") {
-                        break;
-                    }
+                if vec.ends_with(b"\r\n\r\n") {
+                    break;
                 }
-                None => break,
-            },
-            Err(e) => {
+            }
+            Some(Err(e)) => {
                 error!("{e}");
                 return Err(e.into());
             }
+            None => break,
         }
     }
 
@@ -144,12 +146,12 @@ impl SseClient {
             endpoint: None,
             state: SseClientState::Uninitialized,
             msg_id: AtomicU64::new(1),
-            response: None,
+            stream: None,
         }
     }
 
     pub async fn recv_message(&mut self) -> Result<JsonRPCMessage> {
-        let data = match self.response.as_mut() {
+        let data = match self.stream.as_mut() {
             Some(v) => read_all(v).await?,
             None => return Err(Error::NotConnected),
         };
@@ -203,7 +205,7 @@ impl SseClient {
             //
             // server sends a hello message first
             //
-            let data = match self.response.as_mut() {
+            let data = match self.stream.as_mut() {
                 Some(v) => read_all(v).await?,
                 None => break Err(Error::NotConnected),
             };
@@ -258,7 +260,10 @@ impl SseClient {
 impl OMcpClientTrait for SseClient {
     async fn connect(&mut self) -> Result<()> {
         let response = sse_http_connect(&self.client, &self.server, &self.headers).await?;
-        self.response = Some(response);
+
+        let stream = response.bytes_stream();
+
+        self.stream = Some(Box::pin(stream));
 
         self.init_connection().await?;
 
