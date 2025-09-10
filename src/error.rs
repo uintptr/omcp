@@ -27,6 +27,7 @@ pub enum Error {
     Eof,
     ConnectionStateFailure,
     NotFound,
+    TypingError,
     FunctionCallFailure {
         error: String,
     },

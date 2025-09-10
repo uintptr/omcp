@@ -34,7 +34,7 @@ impl<E: std::fmt::Display> OMcpClientTrait for BakedClient<E> {
         Err(Error::NotImplemented)
     }
     async fn call(&mut self, mcp_params: &McpParams) -> Result<String> {
-        match self.handler.call(mcp_params) {
+        match self.handler.call(mcp_params).await {
             Ok(v) => Ok(v),
             Err(e) => {
                 let err_msg = format!("{e}");

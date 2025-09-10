@@ -4,6 +4,7 @@ use crate::{
     types::McpParams,
 };
 
+use async_trait::async_trait;
 use log::{debug, error};
 
 #[derive(Debug)]
@@ -12,9 +13,11 @@ pub enum OMcpServerType {
     Baked,
 }
 
+#[async_trait(?Send)]
 pub trait BakedMcpToolTrait {
     type Error;
-    fn call(&mut self, params: &McpParams) -> core::result::Result<String, Self::Error>;
+
+    async fn call(&mut self, params: &McpParams) -> core::result::Result<String, Self::Error>;
 }
 
 #[derive(Debug)]

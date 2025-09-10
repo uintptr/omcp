@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use clap::{Parser, Subcommand};
 use log::{
     LevelFilter, {error, info},
@@ -97,10 +98,11 @@ impl BakedUname {
     }
 }
 
+#[async_trait(?Send)]
 impl BakedMcpToolTrait for BakedUname {
     type Error = Error;
 
-    fn call(&mut self, _params: &McpParams) -> Result<String> {
+    async fn call(&mut self, _params: &McpParams) -> Result<String> {
         self.to_json()
     }
 }

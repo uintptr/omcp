@@ -69,6 +69,27 @@ impl McpParams {
     pub fn set_argument(&mut self, args: McpArguments) {
         self.arguments = args
     }
+
+    pub fn get_string<S>(&self, key: S) -> Result<&str>
+    where
+        S: AsRef<str>,
+    {
+        let v = self
+            .arguments
+            .get(key.as_ref())
+            .ok_or(Error::NotFound)?
+            .as_str()
+            .ok_or(Error::TypingError)?;
+        Ok(v)
+    }
+
+    pub fn get<S>(&self, key: S) -> Result<&Value>
+    where
+        S: AsRef<str>,
+    {
+        let v = self.arguments.get(key.as_ref()).ok_or(Error::NotFound)?;
+        Ok(v)
+    }
 }
 
 impl AsRef<McpParams> for McpParams {
