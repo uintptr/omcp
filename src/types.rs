@@ -70,6 +70,32 @@ impl McpParams {
         self.arguments = args
     }
 
+    pub fn get_bool<S>(&self, key: S) -> Result<bool>
+    where
+        S: AsRef<str>,
+    {
+        let v = self
+            .arguments
+            .get(key.as_ref())
+            .ok_or(Error::ParameterNotFound)?
+            .as_bool()
+            .ok_or(Error::ParameterInvalidFormat)?;
+        Ok(v)
+    }
+
+    pub fn get_int<S>(&self, key: S) -> Result<i64>
+    where
+        S: AsRef<str>,
+    {
+        let v = self
+            .arguments
+            .get(key.as_ref())
+            .ok_or(Error::ParameterNotFound)?
+            .as_i64()
+            .ok_or(Error::ParameterInvalidFormat)?;
+        Ok(v)
+    }
+
     pub fn get_string<S>(&self, key: S) -> Result<&str>
     where
         S: AsRef<str>,
@@ -77,9 +103,9 @@ impl McpParams {
         let v = self
             .arguments
             .get(key.as_ref())
-            .ok_or(Error::NotFound)?
+            .ok_or(Error::ParameterNotFound)?
             .as_str()
-            .ok_or(Error::TypingError)?;
+            .ok_or(Error::ParameterInvalidFormat)?;
         Ok(v)
     }
 
@@ -87,7 +113,7 @@ impl McpParams {
     where
         S: AsRef<str>,
     {
-        let v = self.arguments.get(key.as_ref()).ok_or(Error::NotFound)?;
+        let v = self.arguments.get(key.as_ref()).ok_or(Error::ParameterNotFound)?;
         Ok(v)
     }
 }
