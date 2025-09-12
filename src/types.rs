@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::{
     error::{Error, Result},
@@ -81,6 +81,19 @@ impl McpParams {
             .as_bool()
             .ok_or(Error::ParameterInvalidFormat)?;
         Ok(v)
+    }
+
+    pub fn get_object<S>(&self, key: S) -> Result<Map<String, Value>>
+    where
+        S: AsRef<str>,
+    {
+        let v = self
+            .arguments
+            .get(key.as_ref())
+            .ok_or(Error::ParameterNotFound)?
+            .as_object()
+            .ok_or(Error::ParameterInvalidFormat)?;
+        Ok(v.clone())
     }
 
     pub fn get_int<S>(&self, key: S) -> Result<i64>
