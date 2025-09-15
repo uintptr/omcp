@@ -1,7 +1,7 @@
 use crate::{
-    client::{io::OMcpClientTrait, types::BakedMcpToolTrait},
+    client::io::OMcpClientTrait,
     error::{Error, Result},
-    types::{McpParams, McpTool},
+    types::{BakedMcpToolTrait, McpParams, McpTool},
 };
 use async_trait::async_trait;
 

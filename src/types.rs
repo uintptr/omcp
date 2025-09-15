@@ -1,5 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -7,6 +8,13 @@ use crate::{
     error::{Error, Result},
     json_rpc::JsonRPCParameters,
 };
+
+#[async_trait(?Send)]
+pub trait BakedMcpToolTrait {
+    type Error;
+
+    async fn call(&mut self, params: &McpParams) -> core::result::Result<String, Self::Error>;
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum ToolType {
@@ -176,12 +184,15 @@ pub struct McpTool {
 pub enum McpTypes {
     #[serde(rename = "sse")]
     Sse,
+    #[serde(rename = "baked")]
+    Baked,
 }
 
 impl std::fmt::Display for McpTypes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             McpTypes::Sse => write!(f, "sse"),
+            McpTypes::Baked => write!(f, "baked"),
         }
     }
 }

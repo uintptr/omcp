@@ -1,23 +1,14 @@
 use crate::{
     error::{Error, Result},
     json_rpc::{JsonRPCMessage, JsonRPCMessageBuilder},
-    types::McpParams,
 };
 
-use async_trait::async_trait;
 use log::{debug, error};
 
 #[derive(Debug)]
 pub enum OMcpServerType {
     Sse,
     Baked,
-}
-
-#[async_trait(?Send)]
-pub trait BakedMcpToolTrait {
-    type Error;
-
-    async fn call(&mut self, params: &McpParams) -> core::result::Result<String, Self::Error>;
 }
 
 #[derive(Debug)]

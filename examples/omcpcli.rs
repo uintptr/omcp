@@ -1,16 +1,15 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use clap::{Parser, Subcommand};
 use log::{
     LevelFilter, {error, info},
 };
 use omcp::{
-    client::{
-        baked::BakedClient,
-        builder::OMcpClientBuilder,
-        types::{BakedMcpToolTrait, OMcpServerType},
-    },
+    client::{baked::BakedClient, builder::OMcpClientBuilder, types::OMcpServerType},
     error::{Error, Result},
-    types::McpParams,
+    server::{stdio::StdioServer, types::OMcpServerTrait},
+    types::{BakedMcpToolTrait, McpParams},
 };
 
 use rstaples::{logging::StaplesLogger, staples::printkv};
@@ -37,6 +36,15 @@ struct UserArgsDump {
 }
 
 #[derive(Parser)]
+struct UserArgsDumpStd {
+    /// Server
+    #[arg(short, long)]
+    program: PathBuf,
+    /// Arguments
+    arguments: Option<String>,
+}
+
+#[derive(Parser)]
 struct UserArgsCall {
     /// Server
     #[arg(short, long)]
@@ -58,7 +66,8 @@ struct UserArgsCall {
 #[derive(Subcommand)]
 enum Commands {
     /// List supported tools to JSON
-    ListTools(UserArgsDump),
+    ListToolsSse(UserArgsDump),
+    ListToolsStdin(UserArgsDumpStd),
     BakedUname,
     Call(UserArgsCall),
 }
@@ -248,12 +257,25 @@ async fn main_baked_uname() -> Result<()> {
     }
 }
 
+async fn main_list_tools_std(args: UserArgsDumpStd) -> Result<()> {
+    let mut s = StdioServer::new(args.program)?;
+
+    s.listen().await?;
+
+    let tools = s.list_tools().await?;
+
+    info!("{tools}");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = UserArgs::parse();
 
     match args.command {
-        Commands::ListTools(d) => main_list_tool(d).await,
+        Commands::ListToolsSse(d) => main_list_tool(d).await,
+        Commands::ListToolsStdin(s) => main_list_tools_std(s).await,
         Commands::BakedUname => main_baked_uname().await,
         Commands::Call(c) => main_call(c).await,
     }
