@@ -1,12 +1,11 @@
 [package]
 name = "omcp"
-version = "0.1.11"
+version = "0.2.0"
 edition = "2024"
-license = "MIT"
 description = "Utility functions"
-repository = "https://github.com/uintptr/omcp"
 homepage = "https://github.com/uintptr/omcp"
-
+repository = "https://github.com/uintptr/omcp"
+license = "MIT"
 
 [dependencies]
 async-trait = "0.1"
@@ -20,31 +19,29 @@ rstaples = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-tokio = { version = "1.49", features = [
-    "macros",
-    "tokio-macros",
-    "test-util"
-] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.49", features = [
-    "macros",
-    "tokio-macros",
-    "test-util",
-    "rt-multi-thread",
-    "process",
-    "io-util",
-    "io-std",
-    "net"
-] }
-
-
 [dev-dependencies]
 clap = { version = "4.5", features = ["derive"] }
 uname = "0.1"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = [
+  "io-std",
+  "io-util",
+  "macros",
+  "net",
+  "process",
+  "rt-multi-thread",
+  "test-util",
+  "tokio-macros"
+] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1.49", features = ["macros", "test-util", "tokio-macros"] }
+
+[features]
+default = []
+client = []
+server = []
 
 [[examples]]
 name = "omcpcli"
@@ -54,4 +51,4 @@ path = "examples/omcpcli.rs"
 name = "omcp_std_server"
 path = "examples/omcp_std_server.rs"
 
-#name = "std_server"
+# name = "std_server"
